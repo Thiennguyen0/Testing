@@ -1,0 +1,273 @@
+<!--
+File: index.html (save as cute-love-graphics.html or index.html)
+Description: Single-file interactive "cute love" graphics you can host on GitHub Pages.
+How to host on GitHub Pages:
+1. Create a new GitHub repo (public) and add this file named index.html to the repo root.
+2. In repository Settings -> Pages, choose branch "main" (or "gh-pages") and folder "/ (root)" -> Save. GitHub will publish at https://<your-username>.github.io/<repo-name>/ usually within a minute.
+
+Features:
+- Fullscreen canvas with floating, pulsing hearts
+- Click or tap to spawn hearts
+- Center message card with typing effect and a "Send love" button
+- Responsive, mobile-friendly
+- No external libraries or assets (self-contained)
+*/-->
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Cute Love — Interactive Graphics</title>
+  <style>
+    :root{
+      --bg1:#ffecd2;
+      --bg2:#fcb69f;
+      --card: rgba(255,255,255,0.8);
+      --muted: #5a4b4b;
+      --accent: #ff5470;
+    }
+    html,body{height:100%;margin:0;font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;}
+    body{
+      background: linear-gradient(135deg,var(--bg1),var(--bg2));
+      overflow:hidden; display:flex; align-items:center; justify-content:center; color:var(--muted);
+    }
+    canvas{position:fixed; inset:0; z-index:0}
+
+    .card{
+      position:relative; z-index:5; width:min(720px,92%); max-width:900px; padding:28px; border-radius:18px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0.82)); box-shadow: 0 12px 40px rgba(0,0,0,0.12);
+      display:flex; gap:20px; align-items:center; backdrop-filter: blur(6px);
+    }
+    .left{
+      width:120px; height:120px; flex:0 0 120px; display:flex; align-items:center; justify-content:center;
+    }
+    .heart-big{
+      width:110px; height:110px; transform-origin:center; animation:beat 1s infinite ease-in-out;
+    }
+    @keyframes beat{
+      0%,100%{transform:scale(1)}
+      50%{transform:scale(1.08)}
+    }
+    .content{flex:1}
+    h1{margin:0;font-size:24px;color:#462b4a}
+    p{margin:8px 0 16px;color:#6b5566}
+    .typing{font-weight:600;color:var(--accent); min-height:26px}
+    .controls{display:flex; gap:10px; flex-wrap:wrap}
+    .btn{border:0;padding:10px 14px;border-radius:12px;font-weight:600;cursor:pointer;background:linear-gradient(90deg,#ff7aa2,#ff5470);color:white;box-shadow:0 8px 18px rgba(255,84,112,0.22)}
+    .btn.ghost{background:transparent;border:1px solid rgba(70,40,60,0.08);color:#6b5566;box-shadow:none}
+    .footer{font-size:12px;color:#7b6576;margin-top:8px}
+
+    .hint{position:fixed; right:18px; bottom:18px; z-index:6; background:var(--card); padding:10px 12px; border-radius:12px; box-shadow:0 6px 16px rgba(0,0,0,0.08)}
+
+    @media (max-width:520px){
+      .card{padding:16px; border-radius:12px}
+      .left{display:none}
+      h1{font-size:18px}
+    }
+  </style>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <div class="card" role="dialog" aria-label="Cute love message">
+    <div class="left" aria-hidden="true">
+      <!-- SVG heart -->
+      <svg class="heart-big" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M12 21s-7.333-4.613-9.1-7.05C-0.1 9 4 4 8 6c1.7 1 2 3 4 3s2.3-2 4-3c4-2 9.1 3 5.1 7.95C19.333 16.387 12 21 12 21z" fill="url(#g)" />
+        <defs>
+          <linearGradient id="g" x1="0" x2="1">
+            <stop offset="0" stop-color="#ff94b1"/>
+            <stop offset="1" stop-color="#ff5470"/>
+          </linearGradient>
+        </defs>
+      </svg>
+    </div>
+
+    <div class="content">
+      <h1>Send a little love 💌</h1>
+      <p class="typing" id="typing">Click or tap anywhere to spawn hearts — try the button below!</p>
+
+      <div class="controls">
+        <button class="btn" id="send">Send love</button>
+        <button class="btn ghost" id="calm">Calm mode</button>
+      </div>
+
+      <div class="footer">Made with ✨ and JavaScript — perfect for GitHub Pages.</div>
+    </div>
+  </div>
+
+  <div class="hint">Tap / Click to create hearts — hold to make lots!</div>
+
+  <script>
+  // Cute love graphics — Canvas animation
+  (function(){
+    const canvas = document.getElementById('scene');
+    const ctx = canvas.getContext('2d');
+    let dpr = Math.max(1, window.devicePixelRatio || 1);
+    function resize(){
+      dpr = Math.max(1, window.devicePixelRatio || 1);
+      canvas.width = Math.floor(window.innerWidth * dpr);
+      canvas.height = Math.floor(window.innerHeight * dpr);
+      canvas.style.width = window.innerWidth + 'px';
+      canvas.style.height = window.innerHeight + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // particle (heart) factory
+    class Heart {
+      constructor(x,y,scale=1){
+        this.x = x; this.y = y;
+        this.vx = (Math.random()-0.5) * 1.6;
+        this.vy = - (1 + Math.random()*1.6);
+        this.life = 1 + Math.random()*1.6;
+        this.age = 0;
+        this.scale = 0.7 + Math.random()*0.9 * scale;
+        this.rotation = (Math.random()-0.5)*0.6;
+        this.spin = (Math.random()-0.5)*0.06;
+        this.colorA = Math.random()*0.7;
+        this.alpha = 1;
+      }
+      update(dt){
+        this.age += dt;
+        this.vy += 0.025; // gravity
+        this.x += this.vx * dt * 60;
+        this.y += this.vy * dt * 60;
+        this.rotation += this.spin * dt * 60;
+        this.alpha = Math.max(0, 1 - this.age/this.life);
+        return this.age < this.life + 0.8;
+      }
+      draw(ctx){
+        ctx.save();
+        ctx.globalAlpha = this.alpha;
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.rotation);
+        const s = 18 * this.scale;
+        // simple heart path
+        ctx.beginPath();
+        ctx.moveTo(0, -s*0.3);
+        ctx.bezierCurveTo(-s, -s*1.2, -s*1.2, s*0.35, 0, s);
+        ctx.bezierCurveTo(s*1.2, s*0.35, s, -s*1.2, 0, -s*0.3);
+        ctx.closePath();
+        // gradient fill
+        const g = ctx.createLinearGradient(-s, -s, s, s);
+        g.addColorStop(0, `hsl(${330 - this.colorA*40}deg 90% 70%)`);
+        g.addColorStop(1, `hsl(${345 - this.colorA*30}deg 100% 55%)`);
+        ctx.fillStyle = g;
+        ctx.fill();
+        // small shine
+        ctx.beginPath();
+        ctx.ellipse(-s*0.25, -s*0.2, s*0.22, s*0.12, 0, 0, Math.PI*2);
+        ctx.fillStyle = 'rgba(255,255,255,0.25)';
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    let hearts = [];
+    let last = performance.now();
+    function loop(t){
+      const now = t; const dt = Math.min(0.06, (now - last)/1000);
+      last = now;
+      ctx.clearRect(0,0,canvas.width/dpr, canvas.height/dpr);
+
+      // ambient floating tiny hearts
+      if(Math.random() < 0.02) spawn(window.innerWidth * Math.random(), window.innerHeight + 30, 0.6);
+
+      for(let i = hearts.length-1; i>=0; i--){
+        const h = hearts[i];
+        const alive = h.update(dt);
+        h.draw(ctx);
+        if(!alive) hearts.splice(i,1);
+      }
+
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+
+    function spawn(x,y,scale){
+      hearts.push(new Heart(x + (Math.random()-0.5)*20, y + (Math.random()-0.5)*20, scale));
+    }
+
+    // interactions: click / tap and hold to make many
+    let down = false; let downTimer = null;
+    function makeBurst(x,y,count=8,scale=1){
+      for(let i=0;i<count;i++) spawn(x + (Math.random()-0.5)*40, y + (Math.random()-0.5)*40, scale*(0.8+Math.random()*0.8));
+    }
+
+    canvas.addEventListener('pointerdown', e=>{
+      down = true;
+      const r = e;
+      makeBurst(r.clientX, r.clientY, 12, 1.1);
+      downTimer = setInterval(()=>{
+        makeBurst(r.clientX + (Math.random()-0.5)*40, r.clientY + (Math.random()-0.5)*40, 6, 0.9);
+      }, 140);
+    });
+    window.addEventListener('pointerup', ()=>{down=false; clearInterval(downTimer); downTimer=null});
+    canvas.addEventListener('pointermove', e=>{ if(down){ if(Math.random()<0.3) spawn(e.clientX,e.clientY,0.9) }});
+
+    // buttons: send and calm
+    const send = document.getElementById('send');
+    const calm = document.getElementById('calm');
+    send.addEventListener('click', ()=>{
+      const cx = window.innerWidth/2, cy = window.innerHeight/2 - 20;
+      for(let i=0;i<40;i++) setTimeout(()=> makeBurst(cx + (Math.random()-0.5)*120, cy + (Math.random()-0.5)*80, 6, 1.2), i*20);
+      // playful typed message change
+      typeMessage("Love sent! 💖");
+    });
+    calm.addEventListener('click', ()=>{
+      // calm mode - fewer ambient hearts
+      typeMessage("Calm mode — gentle floating ♥");
+      // create a few slow hearts
+      for(let i=0;i<8;i++) spawn(Math.random()*window.innerWidth, window.innerHeight - 20, 0.9);
+    });
+
+    // typing effect
+    const typingEl = document.getElementById('typing');
+    const phrases = [
+      'Click or tap anywhere to spawn hearts — try the button below!',
+      'Sending hugs and little heart bubbles...',
+      'You are loved — sprinkle kindness!',
+      'Love is in the air ✨',
+    ];
+    let tpi = 0; let char = 0; let typingTimer = null;
+    function typeMessage(next){
+      clearInterval(typingTimer);
+      let i = 0; char = 0; typingEl.textContent = '';
+      typingTimer = setInterval(()=>{
+        char++;
+        typingEl.textContent = next.slice(0,char);
+        if(char >= next.length) clearInterval(typingTimer);
+      }, 18);
+    }
+    // cycle small messages
+    setInterval(()=>{
+      tpi = (tpi+1) % phrases.length;
+      typeMessage(phrases[tpi]);
+    }, 4700);
+
+    // friendly little keyboard easter: press L to spawn heart shower
+    window.addEventListener('keydown', e=>{
+      if(e.key.toLowerCase() === 'l'){
+        const cx = window.innerWidth/2, cy = window.innerHeight/2;
+        for(let i=0;i<80;i++) setTimeout(()=> spawn(Math.random()*window.innerWidth, Math.random()*window.innerHeight/2, 0.8 + Math.random()*0.8), i*8);
+        typeMessage('Love shower! ☔️❤️');
+      }
+    });
+
+    // accessibility: reduce animation if prefers-reduced-motion
+    const rq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    if(rq.matches){
+      // clear ambient spawns and stop heart beats
+      clearInterval();
+    }
+
+    // initial small burst
+    for(let i=0;i<14;i++) setTimeout(()=> spawn(window.innerWidth/2 + (Math.random()-0.5)*100, window.innerHeight/2 + (Math.random()-0.5)*40, 1), i*40);
+
+  })();
+  </script>
+</body>
+</html>
